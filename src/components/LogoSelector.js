@@ -5,10 +5,8 @@ const LogoSelector = ({ onLogoSelect }) => {
   
   // AI工具Logo列表
   const logos = [
-    { id: 'midjourney', name: 'Midjourney', path: '/images/logos/midjourney.png' },
-    { id: 'dalle', name: 'DALL-E', path: '/images/logos/dalle.png' },
-    { id: 'stable-diffusion', name: 'Stable Diffusion', path: '/images/logos/stable-diffusion.png' },
-    { id: 'leonardo', name: 'Leonardo AI', path: '/images/logos/leonardo.png' },
+    { id: 'doubao', name: '豆包AI', path: '/images/logos/doubao_ai.png' },
+    { id: 'gemini', name: 'Gemini', path: '/images/logos/gemini.png' },
     { id: 'none', name: '不添加Logo', path: null }
   ];
 
@@ -38,7 +36,11 @@ const LogoSelector = ({ onLogoSelect }) => {
             <div className="flex flex-col items-center">
               {logo.path ? (
                 <div className="h-12 w-12 flex items-center justify-center mb-2">
-                  <div className="text-xs text-gray-500">[Logo占位]</div>
+                  <img 
+                    src={logo.path} 
+                    alt={logo.name} 
+                    className="max-h-full max-w-full object-contain"
+                  />
                 </div>
               ) : (
                 <div className="h-12 w-12 flex items-center justify-center mb-2">

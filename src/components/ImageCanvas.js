@@ -2,8 +2,15 @@ import { useRef, useEffect, useState } from 'react';
 
 const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
   const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [displayDimensions, setDisplayDimensions] = useState({ width: 0, height: 0 });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [logoPosition, setLogoPosition] = useState({ x: 0, y: 0 });
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [logoSize, setLogoSize] = useState({ width: 0, height: 0 });
+  const [logoScale, setLogoScale] = useState(1); // Logo缩放比例，默认为1
 
   // 当图片URL变化时，重新绘制Canvas
   useEffect(() => {
@@ -16,6 +23,9 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
         width: image.width,
         height: image.height
       });
+      
+      // 重置到默认的Logo缩放比例
+      setLogoScale(1.0);
     };
     image.src = imageUrl;
   }, [imageUrl]);
@@ -24,11 +34,51 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
   useEffect(() => {
     if (!imageUrl || dimensions.width === 0 || dimensions.height === 0) return;
     
+    // 计算显示尺寸，确保图片不会超出容器
+    const calculateDisplayDimensions = () => {
+      if (!containerRef.current) return;
+      
+      const containerWidth = containerRef.current.clientWidth;
+      const maxHeight = window.innerHeight * 0.7; // 最大高度为窗口高度的70%
+      
+      let displayWidth = dimensions.width;
+      let displayHeight = dimensions.height;
+      
+      // 如果图片宽度超过容器宽度，等比缩小
+      if (displayWidth > containerWidth) {
+        const ratio = containerWidth / displayWidth;
+        displayWidth = containerWidth;
+        displayHeight = displayHeight * ratio;
+      }
+      
+      // 如果图片高度超过最大高度，等比缩小
+      if (displayHeight > maxHeight) {
+        const ratio = maxHeight / displayHeight;
+        displayHeight = maxHeight;
+        displayWidth = displayWidth * ratio;
+      }
+      
+      setDisplayDimensions({
+        width: displayWidth,
+        height: displayHeight
+      });
+    };
+    
+    calculateDisplayDimensions();
+    
+    // 监听窗口大小变化
+    const handleResize = () => calculateDisplayDimensions();
+    window.addEventListener('resize', handleResize);
+    
     const image = new Image();
     image.onload = () => {
       drawImageOnCanvas(image);
     };
     image.src = imageUrl;
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
   }, [dimensions, imageUrl]);
 
   // 当Logo URL或效果变化时，重新绘制Canvas
@@ -109,17 +159,30 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
     
     const logo = new Image();
     logo.onload = () => {
-      // 计算Logo的位置和大小
-      const logoWidth = Math.min(width * 0.2, 150); // Logo宽度最大为画布宽度的20%或150px
+      // 计算Logo的基础大小
+      const baseLogoWidth = Math.min(width * 0.2, 150); // Logo基础宽度最大为画布宽度的20%或150px
+      
+      // 应用用户设置的缩放比例
+      const logoWidth = baseLogoWidth * logoScale;
       const logoHeight = (logo.height / logo.width) * logoWidth;
       
-      // 在右下角绘制Logo，留出10px的边距
-      const x = width - logoWidth - 10;
-      const y = height - logoHeight - 10;
+      // 如果还没有设置Logo位置，默认放在右下角
+      if (logoPosition.x === 0 && logoPosition.y === 0) {
+        setLogoPosition({
+          x: width - logoWidth - 10,
+          y: height - logoHeight - 10
+        });
+      }
+      
+      // 保存Logo尺寸信息
+      setLogoSize({
+        width: logoWidth,
+        height: logoHeight
+      });
       
       // 设置透明度
       ctx.globalAlpha = 0.7;
-      ctx.drawImage(logo, x, y, logoWidth, logoHeight);
+      ctx.drawImage(logo, logoPosition.x, logoPosition.y, logoWidth, logoHeight);
       ctx.globalAlpha = 1.0;
     };
     logo.src = logoUrl;
@@ -149,18 +212,174 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
     document.body.removeChild(link);
   };
 
+  // 处理鼠标事件，实现Logo拖动功能
+  const handleMouseDown = (e) => {
+    if (!logoUrl || !dimensions.width) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // 获取鼠标相对于Canvas的位置
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = dimensions.width / displayDimensions.width;
+    const scaleY = dimensions.height / displayDimensions.height;
+    
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+    
+    // 检查鼠标是否在Logo区域内
+    if (
+      mouseX >= logoPosition.x &&
+      mouseX <= logoPosition.x + logoSize.width &&
+      mouseY >= logoPosition.y &&
+      mouseY <= logoPosition.y + logoSize.height
+    ) {
+      setIsDraggingLogo(true);
+      setDragOffset({
+        x: mouseX - logoPosition.x,
+        y: mouseY - logoPosition.y
+      });
+    }
+  };
+  
+  const handleMouseMove = (e) => {
+    if (!isDraggingLogo || !logoUrl) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    // 获取鼠标相对于Canvas的位置
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = dimensions.width / displayDimensions.width;
+    const scaleY = dimensions.height / displayDimensions.height;
+    
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+    
+    // 计算新的Logo位置
+    const newX = mouseX - dragOffset.x;
+    const newY = mouseY - dragOffset.y;
+    
+    // 限制Logo不超出画布边界
+    const boundedX = Math.max(0, Math.min(dimensions.width - logoSize.width, newX));
+    const boundedY = Math.max(0, Math.min(dimensions.height - logoSize.height, newY));
+    
+    setLogoPosition({
+      x: boundedX,
+      y: boundedY
+    });
+    
+    // 重新绘制Canvas
+    const image = new Image();
+    image.onload = () => {
+      drawImageOnCanvas(image);
+    };
+    image.src = imageUrl;
+  };
+  
+  const handleMouseUp = () => {
+    setIsDraggingLogo(false);
+  };
+  
+  // 添加鼠标事件监听
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    canvas.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [logoUrl, dimensions, logoPosition, logoSize, isDraggingLogo, dragOffset, displayDimensions]);
+  
+  // Logo大小调节函数
+  const handleLogoSizeChange = (newScale) => {
+    // 保证精确到小数点后一位
+    const roundedScale = Math.round(newScale * 10) / 10;
+    setLogoScale(roundedScale);
+    
+    // 重新绘制Canvas
+    if (imageUrl) {
+      const image = new Image();
+      image.onload = () => {
+        drawImageOnCanvas(image);
+      };
+      image.src = imageUrl;
+    }
+  };
+  
+  // 获取显示的百分比文本
+  const getDisplayPercentage = () => {
+    return `${Math.round(logoScale * 100)}%`;
+  };
+  
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       {isProcessing && (
         <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 z-10">
           <div className="text-lg font-semibold">处理中...</div>
+        </div>
+      )}
+      {logoUrl && (
+        <div className="mb-4 text-sm">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-gray-600">提示：可以直接拖动Logo调整位置</p>
+            <div className="flex items-center">
+              <span className="text-gray-600 mr-2">Logo大小：</span>
+              <button 
+                onClick={() => handleLogoSizeChange(Math.max(0.2, logoScale - 0.2))}
+                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-l"
+                disabled={logoScale <= 0.2}
+              >
+                -
+              </button>
+              <span className="px-2 py-1 bg-gray-100">{getDisplayPercentage()}</span>
+              <button 
+                onClick={() => handleLogoSizeChange(Math.min(3, logoScale + 0.2))}
+                className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded-r"
+                disabled={logoScale >= 3}
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div className="w-full">
+            <div className="relative">
+              <input
+                type="range"
+                min="0.2"
+                max="3"
+                step="0.1"
+                value={logoScale}
+                onChange={(e) => handleLogoSizeChange(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>20%</span>
+                <span style={{ position: 'absolute', left: 'calc((0.5 - 0.2) / 2.8 * 100% - 12px)' }}>50%</span>
+                <span style={{ position: 'absolute', left: 'calc((1.0 - 0.2) / 2.8 * 100% - 12px)' }}>100%</span>
+                <span style={{ position: 'absolute', left: 'calc((2.0 - 0.2) / 2.8 * 100% - 12px)' }}>200%</span>
+                <span>300%</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       <canvas
         ref={canvasRef}
         width={dimensions.width}
         height={dimensions.height}
-        className="max-w-full h-auto border rounded shadow-sm"
+        style={{
+          width: displayDimensions.width > 0 ? displayDimensions.width : 'auto',
+          height: displayDimensions.height > 0 ? displayDimensions.height : 'auto',
+          cursor: isDraggingLogo ? 'grabbing' : (logoUrl ? 'grab' : 'default')
+        }}
+        className="border rounded shadow-sm"
       />
       {imageUrl && (
         <div className="mt-4 flex space-x-4">
