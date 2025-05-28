@@ -1,0 +1,34 @@
+{
+  "name": "ai_said_so",
+  "version": "1.0.0",
+  "description": "一款有趣的纯前端在线图片处理工具，可以为真实图片添加AI绘画工具的Logo水印，制作出\"AI生成风格\"的图片。",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lapis0x0/AI_Said_So.git"
+  },
+  "keywords": ["nextjs", "react", "canvas", "image-processing", "ai"],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Lapis0x0/AI_Said_So/issues"
+  },
+  "homepage": "https://github.com/Lapis0x0/AI_Said_So#readme",
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.16",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.0.0",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.5"
+  }
+}
