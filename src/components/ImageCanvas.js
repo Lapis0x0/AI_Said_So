@@ -41,13 +41,18 @@ const ImageCanvas = ({
         }
       }
       
-      // 如果是默认位置，计算并设置Logo在右下角的位置
-      if ((logoPosition.x === 0 && logoPosition.y === 0) || 
-          (initialLogoPosition.x === 0 && initialLogoPosition.y === 0)) {
+      // 如果有Logo且是默认位置，计算并设置Logo在右下角的位置
+      if (logoUrl && (logoPosition.x === 0 && logoPosition.y === 0)) {
         // 计算Logo的基础大小
         const baseLogoWidth = Math.min(newDimensions.width * 0.2, 150);
         const logoWidth = baseLogoWidth * logoScale;
         const logoHeight = (baseLogoWidth * 0.75) * logoScale; // 使用一个合理的高度估计
+        
+        // 保存Logo尺寸信息
+        setLogoSize({
+          width: logoWidth,
+          height: logoHeight
+        });
         
         const newPosition = {
           x: newDimensions.width - logoWidth - 10,
@@ -63,7 +68,7 @@ const ImageCanvas = ({
       }
     };
     image.src = imageUrl;
-  }, [imageUrl, initialLogoPosition, logoScale, initialLogoScale, onLogoPositionChange, onLogoScaleChange]);
+  }, [imageUrl, initialLogoPosition, logoScale, initialLogoScale, onLogoPositionChange, onLogoScaleChange, logoUrl, logoPosition]);
   
   // 当Canvas尺寸变化时，绘制图片
   useEffect(() => {
@@ -138,10 +143,50 @@ const ImageCanvas = ({
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // 绘制原始图片
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      // 处理降低分辨率效果
+      let targetWidth = image.width;
+      let targetHeight = image.height;
       
-      // 应用效果
+      // 如果设置了分辨率缩放，应用降低分辨率效果
+      if (effects.resolutionScale && effects.resolutionScale < 1) {
+        targetWidth = Math.round(image.width * effects.resolutionScale);
+        targetHeight = Math.round(image.height * effects.resolutionScale);
+      }
+      
+      // 处理固定比例裁剪
+      let sourceX = 0;
+      let sourceY = 0;
+      let sourceWidth = image.width;
+      let sourceHeight = image.height;
+      
+      if (effects.aspectRatio && effects.aspectRatio !== 'original') {
+        // 解析比例值，例如 "16:9" => [16, 9]
+        const [widthRatio, heightRatio] = effects.aspectRatio.split(':').map(Number);
+        
+        if (widthRatio && heightRatio) {
+          const targetRatio = widthRatio / heightRatio;
+          const imageRatio = image.width / image.height;
+          
+          if (targetRatio > imageRatio) {
+            // 目标比例更宽，需要从上下裁剪
+            sourceHeight = image.width / targetRatio;
+            sourceY = (image.height - sourceHeight) / 2;
+          } else {
+            // 目标比例更窄，需要从左右裁剪
+            sourceWidth = image.height * targetRatio;
+            sourceX = (image.width - sourceWidth) / 2;
+          }
+        }
+      }
+      
+      // 绘制处理后的图片
+      ctx.drawImage(
+        image,
+        sourceX, sourceY, sourceWidth, sourceHeight, // 源图像的裁剪区域
+        0, 0, canvas.width, canvas.height // 目标Canvas的绘制区域
+      );
+      
+      // 应用其他效果
       applyEffects(ctx, canvas.width, canvas.height);
       
       // 添加Logo水印
@@ -161,8 +206,6 @@ const ImageCanvas = ({
     if (effects.yellowFilter && effects.yellowFilterIntensity > 0) {
       applyYellowFilter(ctx, width, height, effects.yellowFilterIntensity);
     }
-    
-    // 其他效果可以在这里添加
   };
 
   // 应用黄色/棕褐色调滤镜
@@ -201,18 +244,22 @@ const ImageCanvas = ({
       const logoWidth = baseLogoWidth * logoScale;
       const logoHeight = (logo.height / logo.width) * logoWidth;
       
-      // 保存Logo尺寸信息，但不重新计算位置
-      // 位置已经在图片加载时计算好了
+      // 使用当前存储的尺寸和位置信息，不在这里设置状态
+      // 这样可以避免无限循环更新
       
-      // 保存Logo尺寸信息
-      setLogoSize({
-        width: logoWidth,
-        height: logoHeight
-      });
+      // 确保Logo位置在右下角，但只用于绘制，不更新状态
+      let posX = logoPosition.x;
+      let posY = logoPosition.y;
+      
+      // 如果位置为默认值，使用右下角位置
+      if (posX === 0 && posY === 0) {
+        posX = width - logoWidth - 10;
+        posY = height - logoHeight - 10;
+      }
       
       // 设置透明度
       ctx.globalAlpha = 0.7;
-      ctx.drawImage(logo, logoPosition.x, logoPosition.y, logoWidth, logoHeight);
+      ctx.drawImage(logo, posX, posY, logoWidth, logoHeight);
       ctx.globalAlpha = 1.0;
     };
     logo.src = logoUrl;
@@ -290,10 +337,15 @@ const ImageCanvas = ({
     // 计算新的Logo位置
     const newX = mouseX - dragOffset.x;
     const newY = mouseY - dragOffset.y;
-    
-    // 限制Logo不超出画布边界
-    const boundedX = Math.max(0, Math.min(dimensions.width - logoSize.width, newX));
-    const boundedY = Math.max(0, Math.min(dimensions.height - logoSize.height, newY));
+  
+    // 重新计算Logo的实际尺寸，用于边界检查
+    const baseLogoWidth = Math.min(dimensions.width * 0.2, 150);
+    const logoWidth = baseLogoWidth * logoScale;
+    const logoHeight = baseLogoWidth * logoScale * 0.75; // 使用一个合理的高度估计
+  
+    // 限制Logo不超出画布边界，使用实际计算的尺寸
+    const boundedX = Math.max(0, Math.min(dimensions.width - logoWidth, newX));
+    const boundedY = Math.max(0, Math.min(dimensions.height - logoHeight, newY));
     
     // 直接更新位置并重绘Canvas
     if (canvas) {
@@ -314,10 +366,41 @@ const ImageCanvas = ({
           
           // 如果图片已经加载完成，直接绘制
           if (img.complete) {
-            // 绘制原始图片
-            ctx.drawImage(img, 0, 0, dimensions.width, dimensions.height);
+            // 处理降低分辨率和裁剪效果
+            let sourceX = 0;
+            let sourceY = 0;
+            let sourceWidth = img.width;
+            let sourceHeight = img.height;
             
-            // 应用效果
+            // 处理固定比例裁剪
+            if (effects.aspectRatio && effects.aspectRatio !== 'original') {
+              // 解析比例值，例如 "16:9" => [16, 9]
+              const [widthRatio, heightRatio] = effects.aspectRatio.split(':').map(Number);
+              
+              if (widthRatio && heightRatio) {
+                const targetRatio = widthRatio / heightRatio;
+                const imageRatio = img.width / img.height;
+                
+                if (targetRatio > imageRatio) {
+                  // 目标比例更宽，需要从上下裁剪
+                  sourceHeight = img.width / targetRatio;
+                  sourceY = (img.height - sourceHeight) / 2;
+                } else {
+                  // 目标比例更窄，需要从左右裁剪
+                  sourceWidth = img.height * targetRatio;
+                  sourceX = (img.width - sourceWidth) / 2;
+                }
+              }
+            }
+            
+            // 绘制处理后的图片
+            ctx.drawImage(
+              img,
+              sourceX, sourceY, sourceWidth, sourceHeight, // 源图像的裁剪区域
+              0, 0, dimensions.width, dimensions.height // 目标Canvas的绘制区域
+            );
+            
+            // 应用其他效果
             applyEffects(ctx, dimensions.width, dimensions.height);
             
             // 手动绘制Logo
@@ -325,16 +408,21 @@ const ImageCanvas = ({
               const logoImg = new Image();
               logoImg.src = logoUrl;
               
-              if (logoImg.complete && logoSize.width > 0 && logoSize.height > 0) {
+              if (logoImg.complete) {
+                // 重新计算Logo的尺寸，确保使用当前的缩放比例
+                const baseLogoWidth = Math.min(dimensions.width * 0.2, 150);
+                const logoWidth = baseLogoWidth * logoScale;
+                const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
+                
                 // 设置半透明
-                ctx.globalAlpha = 0.8;
+                ctx.globalAlpha = 0.7;
                 // 绘制Logo
                 ctx.drawImage(
                   logoImg,
                   logoPosition.x,
                   logoPosition.y,
-                  logoSize.width,
-                  logoSize.height
+                  logoWidth,
+                  logoHeight
                 );
                 // 恢复透明度
                 ctx.globalAlpha = 1.0;

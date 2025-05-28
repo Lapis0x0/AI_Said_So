@@ -4,6 +4,7 @@ const EffectsPanel = ({ onEffectsChange, initialEffects = null }) => {
   const [yellowFilterIntensity, setYellowFilterIntensity] = useState(0.3);
   const [resolutionScale, setResolutionScale] = useState(1);
   const [aspectRatio, setAspectRatio] = useState('original');
+  const [showCustomResolution, setShowCustomResolution] = useState(false);
   
   // 当初始效果设置变化时更新状态
   useEffect(() => {
@@ -52,6 +53,28 @@ const EffectsPanel = ({ onEffectsChange, initialEffects = null }) => {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           屎黄色滤镜强度: {Math.round(yellowFilterIntensity * 100)}%
         </label>
+        
+        {/* 预设滤镜强度 */}
+        <div className="grid grid-cols-4 gap-2 mb-2">
+          {[
+            { value: 0, label: '无滤镜' },
+            { value: 0.2, label: '弱' },
+            { value: 0.4, label: '中' },
+            { value: 0.6, label: '强' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              className={`py-1 px-2 text-xs rounded ${Math.abs(yellowFilterIntensity - option.value) < 0.05
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+              }`}
+              onClick={() => handleEffectChange('yellowFilterIntensity', option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        
         <input
           type="range"
           min="0"
@@ -73,6 +96,30 @@ const EffectsPanel = ({ onEffectsChange, initialEffects = null }) => {
         <label className="block text-sm font-medium text-gray-700 mb-1">
           降低分辨率: {Math.round(resolutionScale * 100)}%
         </label>
+        
+        {/* 预设分辨率选项 */}
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          {[
+            { value: 1, label: '原始分辨率' },
+            { value: 0.8, label: '80%' },
+            { value: 0.5, label: '50%' },
+            { value: 0.3, label: '30%' },
+            { value: 0.2, label: '20%' },
+            { value: 0.1, label: '10%' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              className={`py-1 px-2 text-xs rounded ${resolutionScale === option.value
+                ? 'bg-blue-500 text-white'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+              }`}
+              onClick={() => handleEffectChange('resolutionScale', option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        
         <input
           type="range"
           min="0.1"
