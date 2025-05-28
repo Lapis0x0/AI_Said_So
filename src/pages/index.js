@@ -5,6 +5,15 @@ import ImageCanvas from '../components/ImageCanvas';
 import EffectsPanel from '../components/EffectsPanel';
 import LogoSelector from '../components/LogoSelector';
 
+// 缓存键名
+const CACHE_KEYS = {
+  IMAGE_URL: 'ai_said_so_image_url',
+  LOGO_URL: 'ai_said_so_logo_url',
+  EFFECTS: 'ai_said_so_effects',
+  LOGO_POSITION: 'ai_said_so_logo_position',
+  LOGO_SCALE: 'ai_said_so_logo_scale'
+};
+
 export default function Home() {
   const [imageUrl, setImageUrl] = useState(null);
   const [logoUrl, setLogoUrl] = useState(null);
@@ -14,6 +23,69 @@ export default function Home() {
     resolutionScale: 1,
     aspectRatio: 'original'
   });
+  const [logoPosition, setLogoPosition] = useState({ x: 0, y: 0 });
+  const [logoScale, setLogoScale] = useState(1.0);
+  const [isLoaded, setIsLoaded] = useState(false); // 用于标记是否已从缓存加载
+  
+  // 从localStorage加载缓存数据
+  useEffect(() => {
+    // 使用try-catch防止localStorage访问出错
+    try {
+      // 只在客户端执行
+      if (typeof window !== 'undefined') {
+        // 加载图片URL
+        const cachedImageUrl = localStorage.getItem(CACHE_KEYS.IMAGE_URL);
+        if (cachedImageUrl) setImageUrl(cachedImageUrl);
+        
+        // 加载Logo URL
+        const cachedLogoUrl = localStorage.getItem(CACHE_KEYS.LOGO_URL);
+        if (cachedLogoUrl) setLogoUrl(cachedLogoUrl);
+        
+        // 加载效果设置
+        const cachedEffects = localStorage.getItem(CACHE_KEYS.EFFECTS);
+        if (cachedEffects) setEffects(JSON.parse(cachedEffects));
+        
+        // 加载Logo位置
+        const cachedLogoPosition = localStorage.getItem(CACHE_KEYS.LOGO_POSITION);
+        if (cachedLogoPosition) setLogoPosition(JSON.parse(cachedLogoPosition));
+        
+        // 加载Logo缩放比例
+        const cachedLogoScale = localStorage.getItem(CACHE_KEYS.LOGO_SCALE);
+        if (cachedLogoScale) setLogoScale(parseFloat(cachedLogoScale));
+      }
+    } catch (error) {
+      console.error('从缓存加载数据失败:', error);
+    }
+    
+    setIsLoaded(true);
+  }, []);
+  
+  // 当数据变化时保存到localStorage
+  useEffect(() => {
+    // 确保已经从缓存加载过数据，避免覆盖
+    if (!isLoaded) return;
+    
+    try {
+      // 保存图片URL
+      if (imageUrl) {
+        localStorage.setItem(CACHE_KEYS.IMAGE_URL, imageUrl);
+      } else {
+        localStorage.removeItem(CACHE_KEYS.IMAGE_URL);
+      }
+      
+      // 保存Logo URL
+      if (logoUrl) {
+        localStorage.setItem(CACHE_KEYS.LOGO_URL, logoUrl);
+      } else {
+        localStorage.removeItem(CACHE_KEYS.LOGO_URL);
+      }
+      
+      // 保存效果设置
+      localStorage.setItem(CACHE_KEYS.EFFECTS, JSON.stringify(effects));
+    } catch (error) {
+      console.error('保存数据到缓存失败:', error);
+    }
+  }, [imageUrl, logoUrl, effects, isLoaded]);
 
   // 处理图片上传
   const handleImageUpload = (url) => {
@@ -28,6 +100,26 @@ export default function Home() {
   // 处理效果变化
   const handleEffectsChange = (newEffects) => {
     setEffects(newEffects);
+  };
+  
+  // 处理Logo位置变化
+  const handleLogoPositionChange = (position) => {
+    setLogoPosition(position);
+    try {
+      localStorage.setItem(CACHE_KEYS.LOGO_POSITION, JSON.stringify(position));
+    } catch (error) {
+      console.error('保存Logo位置到缓存失败:', error);
+    }
+  };
+  
+  // 处理Logo缩放比例变化
+  const handleLogoScaleChange = (scale) => {
+    setLogoScale(scale);
+    try {
+      localStorage.setItem(CACHE_KEYS.LOGO_SCALE, scale.toString());
+    } catch (error) {
+      console.error('保存Logo缩放比例到缓存失败:', error);
+    }
   };
 
   return (
@@ -52,8 +144,14 @@ export default function Home() {
               
               {imageUrl && (
                 <>
-                  <LogoSelector onLogoSelect={handleLogoSelect} />
-                  <EffectsPanel onEffectsChange={handleEffectsChange} />
+                  <LogoSelector 
+                    onLogoSelect={handleLogoSelect} 
+                    initialLogoUrl={logoUrl} 
+                  />
+                  <EffectsPanel 
+                    onEffectsChange={handleEffectsChange} 
+                    initialEffects={effects} 
+                  />
                 </>
               )}
             </div>
@@ -66,7 +164,11 @@ export default function Home() {
                   <ImageCanvas 
                     imageUrl={imageUrl} 
                     logoUrl={logoUrl} 
-                    effects={effects} 
+                    effects={effects}
+                    initialLogoPosition={logoPosition}
+                    initialLogoScale={logoScale}
+                    onLogoPositionChange={handleLogoPositionChange}
+                    onLogoScaleChange={handleLogoScaleChange}
                   />
                 </div>
               ) : (

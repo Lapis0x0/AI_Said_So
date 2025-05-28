@@ -1,7 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-const LogoSelector = ({ onLogoSelect }) => {
+const LogoSelector = ({ onLogoSelect, initialLogoUrl = null }) => {
   const [selectedLogo, setSelectedLogo] = useState(null);
+  
+  // 当初始Logo URL变化时设置选中状态
+  useEffect(() => {
+    if (initialLogoUrl) {
+      // 查找匹配的Logo
+      const matchedLogo = logos.find(logo => logo.path === initialLogoUrl);
+      if (matchedLogo) {
+        setSelectedLogo(matchedLogo.id);
+      }
+    }
+  }, [initialLogoUrl]);
   
   // AI工具Logo列表
   const logos = [

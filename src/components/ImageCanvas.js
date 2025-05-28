@@ -1,16 +1,24 @@
 import { useRef, useEffect, useState } from 'react';
 
-const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
+const ImageCanvas = ({ 
+  imageUrl, 
+  logoUrl, 
+  effects = {}, 
+  initialLogoPosition = { x: 0, y: 0 },
+  initialLogoScale = 1.0,
+  onLogoPositionChange,
+  onLogoScaleChange
+}) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [displayDimensions, setDisplayDimensions] = useState({ width: 0, height: 0 });
   const [isProcessing, setIsProcessing] = useState(false);
-  const [logoPosition, setLogoPosition] = useState({ x: 0, y: 0 });
+  const [logoPosition, setLogoPosition] = useState(initialLogoPosition);
   const [isDraggingLogo, setIsDraggingLogo] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [logoSize, setLogoSize] = useState({ width: 0, height: 0 });
-  const [logoScale, setLogoScale] = useState(1); // Logo缩放比例，默认为1
+  const [logoScale, setLogoScale] = useState(initialLogoScale); // 使用传入的初始缩放比例
 
   // 当图片URL变化时，重新绘制Canvas
   useEffect(() => {
@@ -19,16 +27,43 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
     const image = new Image();
     image.onload = () => {
       // 设置Canvas尺寸为图片尺寸
-      setDimensions({
+      const newDimensions = {
         width: image.width,
         height: image.height
-      });
+      };
+      setDimensions(newDimensions);
       
-      // 重置到默认的Logo缩放比例
-      setLogoScale(1.0);
+      // 如果是新图片且没有初始缩放比例，重置到默认值
+      if (!initialLogoScale || initialLogoScale === 1.0) {
+        setLogoScale(1.0);
+        if (onLogoScaleChange) {
+          onLogoScaleChange(1.0);
+        }
+      }
+      
+      // 如果是默认位置，计算并设置Logo在右下角的位置
+      if ((logoPosition.x === 0 && logoPosition.y === 0) || 
+          (initialLogoPosition.x === 0 && initialLogoPosition.y === 0)) {
+        // 计算Logo的基础大小
+        const baseLogoWidth = Math.min(newDimensions.width * 0.2, 150);
+        const logoWidth = baseLogoWidth * logoScale;
+        const logoHeight = (baseLogoWidth * 0.75) * logoScale; // 使用一个合理的高度估计
+        
+        const newPosition = {
+          x: newDimensions.width - logoWidth - 10,
+          y: newDimensions.height - logoHeight - 10
+        };
+        
+        setLogoPosition(newPosition);
+        
+        // 通知父组件位置变化
+        if (onLogoPositionChange) {
+          onLogoPositionChange(newPosition);
+        }
+      }
     };
     image.src = imageUrl;
-  }, [imageUrl]);
+  }, [imageUrl, initialLogoPosition, logoScale, initialLogoScale, onLogoPositionChange, onLogoScaleChange]);
   
   // 当Canvas尺寸变化时，绘制图片
   useEffect(() => {
@@ -79,7 +114,7 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [dimensions, imageUrl]);
+  }, [dimensions, imageUrl, logoScale]);
 
   // 当Logo URL或效果变化时，重新绘制Canvas
   useEffect(() => {
@@ -166,13 +201,8 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
       const logoWidth = baseLogoWidth * logoScale;
       const logoHeight = (logo.height / logo.width) * logoWidth;
       
-      // 如果还没有设置Logo位置，默认放在右下角
-      if (logoPosition.x === 0 && logoPosition.y === 0) {
-        setLogoPosition({
-          x: width - logoWidth - 10,
-          y: height - logoHeight - 10
-        });
-      }
+      // 保存Logo尺寸信息，但不重新计算位置
+      // 位置已经在图片加载时计算好了
       
       // 保存Logo尺寸信息
       setLogoSize({
@@ -242,6 +272,7 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
     }
   };
   
+  // 处理鼠标移动事件
   const handleMouseMove = (e) => {
     if (!isDraggingLogo || !logoUrl) return;
     
@@ -264,24 +295,80 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
     const boundedX = Math.max(0, Math.min(dimensions.width - logoSize.width, newX));
     const boundedY = Math.max(0, Math.min(dimensions.height - logoSize.height, newY));
     
-    setLogoPosition({
-      x: boundedX,
-      y: boundedY
-    });
-    
-    // 重新绘制Canvas
-    const image = new Image();
-    image.onload = () => {
-      drawImageOnCanvas(image);
-    };
-    image.src = imageUrl;
+    // 直接更新位置并重绘Canvas
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // 更新位置参数，但不触发React状态更新
+        logoPosition.x = boundedX;
+        logoPosition.y = boundedY;
+        
+        // 重绘Canvas，使得Logo实时跟随鼠标移动
+        // 清除画布
+        ctx.clearRect(0, 0, dimensions.width, dimensions.height);
+        
+        // 绘制原始图片
+        if (imageUrl) {
+          const img = new Image();
+          img.src = imageUrl;
+          
+          // 如果图片已经加载完成，直接绘制
+          if (img.complete) {
+            // 绘制原始图片
+            ctx.drawImage(img, 0, 0, dimensions.width, dimensions.height);
+            
+            // 应用效果
+            applyEffects(ctx, dimensions.width, dimensions.height);
+            
+            // 手动绘制Logo
+            if (logoUrl) {
+              const logoImg = new Image();
+              logoImg.src = logoUrl;
+              
+              if (logoImg.complete && logoSize.width > 0 && logoSize.height > 0) {
+                // 设置半透明
+                ctx.globalAlpha = 0.8;
+                // 绘制Logo
+                ctx.drawImage(
+                  logoImg,
+                  logoPosition.x,
+                  logoPosition.y,
+                  logoSize.width,
+                  logoSize.height
+                );
+                // 恢复透明度
+                ctx.globalAlpha = 1.0;
+              }
+            }
+          }
+        }
+      }
+    }
   };
   
+  // 处理鼠标释放事件
   const handleMouseUp = () => {
+    if (isDraggingLogo) {
+      // 鼠标释放时才更新状态，触发重绘
+      setLogoPosition({...logoPosition});
+      
+      // 通知父组件位置变化
+      if (onLogoPositionChange) {
+        onLogoPositionChange({...logoPosition});
+      }
+      
+      // 重新绘制Canvas
+      if (imageUrl) {
+        const image = new Image();
+        image.onload = () => {
+          drawImageOnCanvas(image);
+        };
+        image.src = imageUrl;
+      }
+    }
     setIsDraggingLogo(false);
   };
   
-  // 添加鼠标事件监听
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -295,13 +382,18 @@ const ImageCanvas = ({ imageUrl, logoUrl, effects = {} }) => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [logoUrl, dimensions, logoPosition, logoSize, isDraggingLogo, dragOffset, displayDimensions]);
+  }, [logoUrl, dimensions, logoSize, isDraggingLogo, dragOffset, displayDimensions, handleMouseDown, handleMouseMove, handleMouseUp]);
   
   // Logo大小调节函数
   const handleLogoSizeChange = (newScale) => {
     // 保证精确到小数点后一位
     const roundedScale = Math.round(newScale * 10) / 10;
     setLogoScale(roundedScale);
+    
+    // 通知父组件缩放比例变化
+    if (onLogoScaleChange) {
+      onLogoScaleChange(roundedScale);
+    }
     
     // 重新绘制Canvas
     if (imageUrl) {

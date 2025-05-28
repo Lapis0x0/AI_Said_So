@@ -1,9 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
-const EffectsPanel = ({ onEffectsChange }) => {
+const EffectsPanel = ({ onEffectsChange, initialEffects = null }) => {
   const [yellowFilterIntensity, setYellowFilterIntensity] = useState(0.3);
   const [resolutionScale, setResolutionScale] = useState(1);
   const [aspectRatio, setAspectRatio] = useState('original');
+  
+  // 当初始效果设置变化时更新状态
+  useEffect(() => {
+    if (initialEffects) {
+      if (initialEffects.yellowFilterIntensity !== undefined) {
+        setYellowFilterIntensity(initialEffects.yellowFilterIntensity);
+      }
+      
+      if (initialEffects.resolutionScale !== undefined) {
+        setResolutionScale(initialEffects.resolutionScale);
+      }
+      
+      if (initialEffects.aspectRatio !== undefined) {
+        setAspectRatio(initialEffects.aspectRatio);
+      }
+    }
+  }, [initialEffects]);
 
   // 当效果参数变化时，通知父组件
   const handleEffectChange = (name, value) => {
