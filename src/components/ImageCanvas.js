@@ -41,8 +41,8 @@ const ImageCanvas = ({
         }
       }
       
-      // 如果有Logo且是默认位置，计算并设置Logo在右下角的位置
-      if (logoUrl && (logoPosition.x === 0 && logoPosition.y === 0)) {
+      // 如果有Logo，总是重新计算Logo在右下角的位置
+      if (logoUrl) {
         // 计算Logo的基础大小
         const baseLogoWidth = Math.min(newDimensions.width * 0.2, 150);
         const logoWidth = baseLogoWidth * logoScale;
@@ -54,21 +54,27 @@ const ImageCanvas = ({
           height: logoHeight
         });
         
-        const newPosition = {
-          x: newDimensions.width - logoWidth - 10,
-          y: newDimensions.height - logoHeight - 10
-        };
-        
-        setLogoPosition(newPosition);
-        
-        // 通知父组件位置变化
-        if (onLogoPositionChange) {
-          onLogoPositionChange(newPosition);
+        // 如果是默认位置或者上传了新图片，重新计算位置
+        if (logoPosition.x === 0 && logoPosition.y === 0 || image.src !== imageUrl) {
+          // 边界修正，确保logo不会超出canvas底部
+          const maxX = newDimensions.width - logoWidth;
+          const maxY = newDimensions.height - logoHeight;
+          const newPosition = {
+            x: Math.max(0, maxX - 10),
+            y: Math.max(0, maxY - 10)
+          };
+          
+          setLogoPosition(newPosition);
+          
+          // 通知父组件位置变化
+          if (onLogoPositionChange) {
+            onLogoPositionChange(newPosition);
+          }
         }
       }
     };
     image.src = imageUrl;
-  }, [imageUrl, initialLogoPosition, logoScale, initialLogoScale, onLogoPositionChange, onLogoScaleChange, logoUrl, logoPosition]);
+  }, [imageUrl, initialLogoPosition, logoScale, initialLogoScale, onLogoPositionChange, onLogoScaleChange, logoUrl]);
   
   // 当Canvas尺寸变化时，绘制图片
   useEffect(() => {
@@ -337,101 +343,56 @@ const ImageCanvas = ({
     // 计算新的Logo位置
     const newX = mouseX - dragOffset.x;
     const newY = mouseY - dragOffset.y;
-  
-    // 重新计算Logo的实际尺寸，用于边界检查
-    const baseLogoWidth = Math.min(dimensions.width * 0.2, 150);
-    const logoWidth = baseLogoWidth * logoScale;
-    const logoHeight = baseLogoWidth * logoScale * 0.75; // 使用一个合理的高度估计
-  
-    // 限制Logo不超出画布边界，使用实际计算的尺寸
-    const boundedX = Math.max(0, Math.min(dimensions.width - logoWidth, newX));
-    const boundedY = Math.max(0, Math.min(dimensions.height - logoHeight, newY));
+
+    // 边界判断，确保logo不会超出canvas底部和右侧
+    let boundedX = Math.max(0, Math.min(newX, dimensions.width - logoSize.width));
+    let boundedY = Math.max(0, Math.min(newY, dimensions.height - logoSize.height));
+
+    // 更新位置参数，但不触发React状态更新
+    logoPosition.x = boundedX;
+    logoPosition.y = boundedY;
     
-    // 直接更新位置并重绘Canvas
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // 更新位置参数，但不触发React状态更新
-        logoPosition.x = boundedX;
-        logoPosition.y = boundedY;
-        
-        // 重绘Canvas，使得Logo实时跟随鼠标移动
-        // 清除画布
-        ctx.clearRect(0, 0, dimensions.width, dimensions.height);
-        
+    // 立即重绘Canvas，使Logo实时跟随鼠标移动
+    const ctx = canvas.getContext('2d');
+    if (ctx && imageUrl) {
+      // 清除画布
+      ctx.clearRect(0, 0, dimensions.width, dimensions.height);
+      
+      // 重新绘制图片和效果
+      const img = new Image();
+      img.src = imageUrl;
+      
+      if (img.complete) {
         // 绘制原始图片
-        if (imageUrl) {
-          const img = new Image();
-          img.src = imageUrl;
+        ctx.drawImage(img, 0, 0, dimensions.width, dimensions.height);
+        
+        // 应用效果
+        applyEffects(ctx, dimensions.width, dimensions.height);
+        
+        // 绘制Logo
+        if (logoUrl) {
+          const logoImg = new Image();
+          logoImg.src = logoUrl;
           
-          // 如果图片已经加载完成，直接绘制
-          if (img.complete) {
-            // 处理降低分辨率和裁剪效果
-            let sourceX = 0;
-            let sourceY = 0;
-            let sourceWidth = img.width;
-            let sourceHeight = img.height;
+          if (logoImg.complete) {
+            // 计算Logo尺寸
+            const baseLogoWidth = Math.min(dimensions.width * 0.2, 150);
+            const logoWidth = baseLogoWidth * logoScale;
+            const logoHeight = (logoImg.height / logoImg.width) * logoWidth || logoWidth * 0.75;
             
-            // 处理固定比例裁剪
-            if (effects.aspectRatio && effects.aspectRatio !== 'original') {
-              // 解析比例值，例如 "16:9" => [16, 9]
-              const [widthRatio, heightRatio] = effects.aspectRatio.split(':').map(Number);
-              
-              if (widthRatio && heightRatio) {
-                const targetRatio = widthRatio / heightRatio;
-                const imageRatio = img.width / img.height;
-                
-                if (targetRatio > imageRatio) {
-                  // 目标比例更宽，需要从上下裁剪
-                  sourceHeight = img.width / targetRatio;
-                  sourceY = (img.height - sourceHeight) / 2;
-                } else {
-                  // 目标比例更窄，需要从左右裁剪
-                  sourceWidth = img.height * targetRatio;
-                  sourceX = (img.width - sourceWidth) / 2;
-                }
-              }
-            }
-            
-            // 绘制处理后的图片
-            ctx.drawImage(
-              img,
-              sourceX, sourceY, sourceWidth, sourceHeight, // 源图像的裁剪区域
-              0, 0, dimensions.width, dimensions.height // 目标Canvas的绘制区域
-            );
-            
-            // 应用其他效果
-            applyEffects(ctx, dimensions.width, dimensions.height);
-            
-            // 手动绘制Logo
-            if (logoUrl) {
-              const logoImg = new Image();
-              logoImg.src = logoUrl;
-              
-              if (logoImg.complete) {
-                // 重新计算Logo的尺寸，确保使用当前的缩放比例
-                const baseLogoWidth = Math.min(dimensions.width * 0.2, 150);
-                const logoWidth = baseLogoWidth * logoScale;
-                const logoHeight = (logoImg.height / logoImg.width) * logoWidth;
-                
-                // 设置半透明
-                ctx.globalAlpha = 0.7;
-                // 绘制Logo
-                ctx.drawImage(
-                  logoImg,
-                  logoPosition.x,
-                  logoPosition.y,
-                  logoWidth,
-                  logoHeight
-                );
-                // 恢复透明度
-                ctx.globalAlpha = 1.0;
-              }
-            }
+            // 设置半透明
+            ctx.globalAlpha = 0.7;
+            // 绘制Logo
+            ctx.drawImage(logoImg, boundedX, boundedY, logoWidth, logoHeight);
+            // 恢复透明度
+            ctx.globalAlpha = 1.0;
           }
         }
       }
     }
+    
+    // 更新React状态，以便其他组件能够获取到最新位置
+    setLogoPosition({ x: boundedX, y: boundedY });
   };
   
   // 处理鼠标释放事件
@@ -497,7 +458,7 @@ const ImageCanvas = ({
   const getDisplayPercentage = () => {
     return `${Math.round(logoScale * 100)}%`;
   };
-  
+
   return (
     <div className="relative" ref={containerRef}>
       {isProcessing && (
@@ -582,5 +543,4 @@ const ImageCanvas = ({
     </div>
   );
 };
-
 export default ImageCanvas;
